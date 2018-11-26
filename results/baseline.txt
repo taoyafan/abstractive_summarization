@@ -1,0 +1,28 @@
+This is a baseline scripts.
+
+exp_name = baseline
+
+lr = 0.15
+pointer_gen = True
+sampling_probability = 0  # Using only the ground truth data (no sampling)
+coverage = False
+
+=====================
+
+Train mode:
+
+--mode=train --data_path=../finished_files/chunked/train_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=baseline --batch_size=32
+
+=====================
+
+Eval mode:
+
+--mode=eval --data_path=../finished_files/chunked/test_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=baseline --batch_size=32
+
+=====================
+
+Decode mode:
+
+--mode=decode --data_path=../finished_files/chunked/test_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=baseline --batch_size=32
+
+=====================
