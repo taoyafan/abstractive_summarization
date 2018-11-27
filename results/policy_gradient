@@ -43,3 +43,12 @@ Decode mode:
 --mode=decode --data_path=../finished_files/chunked/test_* --vocab_path=../finished_files/vocab --log_root=log --exp_name=policy_gradient --batch_size=32 --use_temporal_attention=True --intradecoder=False --eta=1 --rl_training=True --lr=0.001
 
 =====================
+
+Convert old pointer model wrote by Abigail See to this pointer model:
+
+--mode=train --data_path=../finished_files/chunked/train_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=policy_gradient --batch_size=32 --use_temporal_attention=True  --convert_version_old_to_new=True
+
+
+To RL model:
+
+--mode=train --data_path=../finished_files/chunked/train_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=policy_gradient --batch_size=32 --use_temporal_attention=True --intradecoder=False --eta=1 --rl_training=True --lr=0.001  --convert_version_old_to_new=True
