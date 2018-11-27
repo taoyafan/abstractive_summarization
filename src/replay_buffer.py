@@ -4,6 +4,7 @@ except:
   import Queue as queue
 from random import shuffle
 from random import seed
+import operator
 seed(123)
 from threading import Thread
 import numpy as np
@@ -73,12 +74,13 @@ class Transition(object):
     self.q_value = q_value # size: vocab_size
     self.done = done # true/false
 
-  def __cmp__(self, item):
+  def __lt__(self, item):
     """ PriorityQueue uses this functino to sort the rewards
       Args:
         We sort the queue such that items with higher rewards are in the head of max-heap
     """
-    return cmp(item.reward, self.reward) # bigger numbers have more priority
+    return operator.lt(item.reward, self.reward) # bigger numbers have more priority
+
 
 class ReplayBatch(object):
   """ A class for creating batches required for training DDQN. """
@@ -180,7 +182,7 @@ class ReplayBuffer(object):
     """Reads data from file and processes into Examples which are then placed into the example queue."""
     while True:
       try:
-        input_gen = self._example_generator().next()
+        input_gen = next(self._example_generator())
       except StopIteration: # if there are no more examples:
         tf.logging.info("The example generator for this example queue filling thread has exhausted data.")
         raise Exception("single_pass mode is off but the example generator is out of data; error.")

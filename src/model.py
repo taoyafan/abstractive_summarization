@@ -486,23 +486,23 @@ class SummarizationModel(object):
     if self._hps.fixed_eta:
       feed_dict[self._eta] = self._hps.eta
     else:
-      feed_dict[self._eta] = min(step * self._hps.eta,1.)
+      feed_dict[self._eta] = min(step * self._hps.eta, 1.)
     if self._hps.scheduled_sampling:
       if self._hps.fixed_sampling_probability:
         feed_dict[self._sampling_probability] = self._hps.sampling_probability
       else:
-        feed_dict[self._sampling_probability] = min(step * self._hps.sampling_probability,1.) # linear decay function
-      ranges = [np.exp(float(step) * self._hps.alpha),np.finfo(np.float64).max] # to avoid overflow
-      feed_dict[self._alpha] = np.log(ranges[np.argmin(ranges)]) # linear decay function
+        feed_dict[self._sampling_probability] = min(step * self._hps.sampling_probability,1.)  # linear decay function
+      ranges = [np.exp(float(step) * self._hps.alpha), np.finfo(np.float64).max]  # to avoid overflow
+      feed_dict[self._alpha] = np.log(ranges[np.argmin(ranges)])  # linear decay function
 
     vsize_extended = self._vocab.size() + max_art_oovs
     if self._hps.calculate_true_q:
-      self.advantages = np.zeros((self._hps.batch_size, self._hps.k, self._hps.max_dec_steps, vsize_extended),dtype=np.float32) # (batch_size, k, <=max_dec_steps,vocab_size)
-      self.q_values = np.zeros((self._hps.batch_size, self._hps.k, self._hps.max_dec_steps, vsize_extended),dtype=np.float32) # (batch_size, k, <=max_dec_steps,vocab_size)
-      self.r_values = np.zeros((self._hps.batch_size, self._hps.k, self._hps.max_dec_steps, vsize_extended),dtype=np.float32) # (batch_size, k, <=max_dec_steps,vocab_size)
-      self.v_values = np.zeros((self._hps.batch_size, self._hps.k, self._hps.max_dec_steps),dtype=np.float32) # (batch_size, k, <=max_dec_steps)
+      self.advantages = np.zeros((self._hps.batch_size, self._hps.k, self._hps.max_dec_steps, vsize_extended), dtype=np.float32) # (batch_size, k, <=max_dec_steps,vocab_size)
+      self.q_values = np.zeros((self._hps.batch_size, self._hps.k, self._hps.max_dec_steps, vsize_extended), dtype=np.float32) # (batch_size, k, <=max_dec_steps,vocab_size)
+      self.r_values = np.zeros((self._hps.batch_size, self._hps.k, self._hps.max_dec_steps, vsize_extended), dtype=np.float32) # (batch_size, k, <=max_dec_steps,vocab_size)
+      self.v_values = np.zeros((self._hps.batch_size, self._hps.k, self._hps.max_dec_steps), dtype=np.float32) # (batch_size, k, <=max_dec_steps)
     else:
-      self.r_values = np.zeros((self._hps.batch_size, self._hps.k, self._hps.max_dec_steps),dtype=np.float32) # (batch_size, k, <=max_dec_steps)
+      self.r_values = np.zeros((self._hps.batch_size, self._hps.k, self._hps.max_dec_steps), dtype=np.float32) # (batch_size, k, <=max_dec_steps)
     to_return = {
       'sampled_sentences': self.sampled_sentences,
       'greedy_search_sentences': self.greedy_search_sentences,
@@ -575,7 +575,7 @@ class SummarizationModel(object):
         List of the collected reward for each decoding step.
     """
 
-    return [self.calc_reward(t, _ss,_gts) for t in range(1,self._hps.max_dec_steps+1)]
+    return [self.calc_reward(_ss, _gts) for t in range(1, self._hps.max_dec_steps+1)]
 
   def prepare_dqn_transitions(self, hps, decoder_states, greedy_samples, vsize_extended):
     """Prepare the experiences for this batch

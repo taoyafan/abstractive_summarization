@@ -137,6 +137,7 @@ tf.app.flags.DEFINE_float('cov_loss_wt', 1.0, 'Weight of coverage loss (lambda i
 # Utility flags, for restoring and changing checkpoints
 tf.app.flags.DEFINE_boolean('convert_to_coverage_model', False, 'Convert a non-coverage model to a coverage model. Turn this on and run in train mode. Your current training model will be copied to a new version (same name with _cov_init appended) that will be ready to run with coverage flag turned on, for the coverage training stage.')
 tf.app.flags.DEFINE_boolean('restore_best_model', False, 'Restore the best model in the eval/ dir and save it in the train/ dir, ready to be used for further training. Useful for early stopping, or if your training checkpoint has become corrupted with e.g. NaN values.')
+tf.app.flags.DEFINE_boolean('convert_version_old_to_new', False, 'Convert old pointer model realsed by Abigail See to this pointer model. Turn this on and run in train mode. Your old training model will be copied to a new version (same name with _cov_init appended).')
 
 # Debugging. See https://www.tensorflow.org/programmers_guide/debugger
 tf.app.flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches for NaN/inf values)")
@@ -260,6 +261,29 @@ class Seq2Seq(object):
     print("saved.")
     exit()
 
+  def convert_version_old_to_new(self):
+    """Load non-reinforce checkpoint, add initialized extra variables for reinforce, and save as new checkpoint"""
+    tf.logging.info("converting old pointer model wrote by Abigail See to this pointer model..")
+
+    # initialize an entire reinforce model from scratch
+    sess = tf.Session(config=util.get_config())
+    print("initializing everything...")
+    sess.run(tf.global_variables_initializer())
+
+    # load all non-reinforce weights from checkpoint
+    saver = tf.train.Saver([v for v in tf.global_variables() if "attention_decoder/output_projection" not in v.name])
+    print("restoring old model variables...")
+    curr_ckpt = util.load_ckpt(saver, sess)
+    print("restored.")
+
+    # save this model and quit
+    new_fname = curr_ckpt + '_new_init'
+    print("saving model to %s..." % (new_fname))
+    new_saver = tf.train.Saver() # this one will save all variables that now exist
+    new_saver.save(sess, new_fname)
+    print("saved.")
+    exit()
+
   def setup_training(self):
     """Does setup before starting training (run_training)"""
     train_dir = os.path.join(FLAGS.log_root, "train")
@@ -273,6 +297,9 @@ class Seq2Seq(object):
 
     self.model.build_graph() # build the graph
 
+    if FLAGS.convert_version_old_to_new:
+      # assert (FLAGS.rl_training or FLAGS.ac_training), "To convert your pointer model to a reinforce model, run with convert_to_reinforce_model=True and either rl_training=True or ac_training=True"
+      self.convert_version_old_to_new()
     if FLAGS.convert_to_reinforce_model:
       assert (FLAGS.rl_training or FLAGS.ac_training), "To convert your pointer model to a reinforce model, run with convert_to_reinforce_model=True and either rl_training=True or ac_training=True"
       self.convert_to_reinforce_model()
@@ -412,7 +439,7 @@ class Seq2Seq(object):
           if not FLAGS.calculate_true_q:
             # when we are not training DDQN based on true Q-values,
             # we need to update Q-values in our transitions based on the q_estimates we collected from DQN current network.
-            for trans, q_val in zip(transitions,q_estimates):
+            for trans, q_val in zip(transitions, q_estimates):
               trans.q_values = q_val # each have the size vocab_extended
           q_estimates = np.reshape(q_estimates, [FLAGS.batch_size, FLAGS.k, FLAGS.max_dec_steps, -1]) # shape (batch_size, k, max_dec_steps, vocab_size_extended)
         # Once we are done with modifying Q-values, we can use them to train the DDQN model.
@@ -458,7 +485,7 @@ class Seq2Seq(object):
       for (k, v) in printer_helper.items():
         if not np.isfinite(v):
           raise Exception("{} is not finite. Stopping.".format(k))
-        tf.logging.info('{}: {}\t'.format(k,v))
+        tf.logging.info('{}: {}\t'.format(k, v))
       tf.logging.info('-------------------------------------------')
 
       self.summary_writer.add_summary(summaries, self.train_step) # write the summaries
@@ -702,7 +729,7 @@ class Seq2Seq(object):
     'trunc_norm_init_std', 'max_grad_norm', 
     'emb_dim', 'batch_size', 'max_dec_steps', 'max_enc_steps',
     'dqn_scheduled_sampling', 'dqn_sleep_time', 'E2EBackProp',
-    'coverage', 'cov_loss_wt', 'pointer_gen']
+    'coverage', 'cov_loss_wt', 'pointer_gen', 'convert_version_old_to_new']
     hps_dict = {}
     for key, val in flags.items(): # for each flag
       if key in hparam_list: # if it's in the list
@@ -725,9 +752,9 @@ class Seq2Seq(object):
       hps_dict = {}
       for key,val in flags.items(): # for each flag
         if key in hparam_list: # if it's in the list
-          hps_dict[key] = val.value # add it to the dict
-      hps_dict.update({'dqn_input_feature_len':(FLAGS.dec_hidden_dim)})
-      hps_dict.update({'vocab_size':self.vocab.size()})
+          hps_dict[key] = val # add it to the dict
+      hps_dict.update({'dqn_input_feature_len': (FLAGS.dec_hidden_dim)})
+      hps_dict.update({'vocab_size': self.vocab.size()})
       self.dqn_hps = namedtuple("HParams", hps_dict.keys())(**hps_dict)
 
     # Create a batcher object that will create minibatches of data
