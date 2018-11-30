@@ -137,6 +137,9 @@ class Batch(object):
     self.init_encoder_seq(example_list, hps) # initialize the input to the encoder
     self.init_decoder_seq(example_list, hps) # initialize the input and targets for the decoder
     self.store_orig_strings(example_list) # store the original strings
+    
+    if FLAGS.rl_training:
+      self.avg_reward = 0
 
   def init_encoder_seq(self, example_list, hps):
     """Initializes the following:

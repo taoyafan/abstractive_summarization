@@ -27,6 +27,7 @@ from __future__ import unicode_literals
 import numpy as np
 
 import tensorflow as tf
+import data
 
 
 def _len_lcs(x, y):
@@ -73,6 +74,18 @@ def _lcs(x, y):
   return table
 
 
+def _real_len(sentence):
+  """
+  Calculate the real len of sentence end with data.STOP_DECODING_IDX
+
+  :param sentence: a array of idx, end with data.STOP_DECODING_IDX
+
+  :return: length of sentence before end
+  """
+  idx = np.where(sentence == data.STOP_DECODING_IDX)[0]
+  return idx[0] if idx.size != 0 else len(sentence)
+
+
 def _f_lcs(llcs, m, n):
   """Computes the LCS-based F-measure score.
 
@@ -87,8 +100,8 @@ def _f_lcs(llcs, m, n):
   Returns:
     Float. LCS-based F-measure score
   """
-  r_lcs = llcs / m
-  p_lcs = llcs / n
+  r_lcs = llcs / (m + 1e-12)
+  p_lcs = llcs / (n + 1e-12)
   beta = p_lcs / (r_lcs + 1e-12)
   num = (1 + (beta**2)) * r_lcs * p_lcs
   denom = r_lcs + ((beta**2) * p_lcs)
@@ -123,9 +136,9 @@ def rouge_l_sentence_level(eval_sentences, ref_sentences):
 
   f1_scores = []
   for eval_sentence, ref_sentence in zip(eval_sentences, ref_sentences):
-    m = len(ref_sentence)
-    n = len(eval_sentence)
-    lcs = _len_lcs(eval_sentence, ref_sentence)
+    m = _real_len(ref_sentence)
+    n = _real_len(eval_sentence)
+    lcs = _len_lcs(eval_sentence[:n], ref_sentence[:m])
     f1_scores.append(_f_lcs(lcs, m, n))
   return np.array(f1_scores).astype(np.float32)
 
