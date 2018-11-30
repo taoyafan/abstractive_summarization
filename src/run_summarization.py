@@ -465,7 +465,7 @@ class Seq2Seq(object):
     if FLAGS.rl_training:
       avg_info['greedy_r'] = 0
       avg_info['sample_r'] = 0
-    eval_avg_info = avg_info
+    eval_avg_info = avg_info.copy()
     
     while True: # repeats until interrupted
       batch = self.batcher.next_batch()
@@ -546,13 +546,12 @@ class Seq2Seq(object):
       if FLAGS.ac_training:
         self.dqn_summary_writer.flush()
 
-      if self.train_step % 20 == 0: # Running eval data
-        # evaluate for 100 * batch_size before comparing the loss
+      if self.train_step % 100 == 0: # Running eval data
         # we do this due to memory constraint, best to run eval on different machines with large batch size
         iteration = 0
         eval_step = self.train_step
         tf.logging.info('====================================================================================')
-        while iteration < 5:  # Running 20 iteration each time
+        while iteration < 10:  # Running 20 iteration each time
           iteration += 1
           eval_batch = self.eval_batcher.next_batch()
           batch.avg_reward = eval_avg_info['sample_r']
@@ -640,7 +639,7 @@ class Seq2Seq(object):
     if FLAGS.embedding:
       sess.run(tf.global_variables_initializer(), feed_dict={self.model.embedding_place:self.word_vector})
     eval_dir = os.path.join(FLAGS.log_root, "eval") # make a subdir of the root dir for eval data
-    bestmodel_save_path = os.path.join(eval_dir, 'bestmodel') # this is where checkpoints of best models are saved
+    bestmodel_save_path = os.path.join(eval_dir, 'current_model') # this is where checkpoints of best models are saved
     self.summary_writer = tf.summary.FileWriter(eval_dir)
 
     if FLAGS.ac_training:
@@ -757,6 +756,24 @@ class Seq2Seq(object):
             raise Exception("{} is not finite. Stopping.".format(k))
           tf.logging.info('{}: {}\t'.format(k,v))
 
+        # For debug:
+        #
+        # tf.logging.info('target_batch: {}\t'.format(results['target_batch']))
+        # tf.logging.info('greedy_search: {}\t'.format(results['greedy_search']))
+        # tf.logging.info('sample: {}\t'.format(results['sample']))
+        # target_decoded_words = data.outputids2words(results['target_batch'][0], self.vocab,
+        #                                      (batch.art_oovs[0] if FLAGS.pointer_gen else None))
+        #
+        # greedy_decoded_words = data.outputids2words(results['greedy_search'][0], self.vocab,
+        #                                      (batch.art_oovs[0] if FLAGS.pointer_gen else None))
+        #
+        # sample_decoded_words = data.outputids2words(results['sample'][0], self.vocab,
+        #                                      (batch.art_oovs[0] if FLAGS.pointer_gen else None))
+        #
+        # tf.logging.info('target_batch: {}\t'.format(target_decoded_words))
+        # tf.logging.info('greedy_search: {}\t'.format(greedy_decoded_words))
+        # tf.logging.info('sample: {}\t'.format(sample_decoded_words))
+        
         # add summaries
         summaries = results['summaries']
         train_step = results['global_step']
@@ -802,7 +819,7 @@ class Seq2Seq(object):
       # These checkpoints will appear as bestmodel-<iteration_number> in the eval dir
       if best_loss is None or running_avg_loss < best_loss:
         tf.logging.info('Found new best model with %.3f running_avg_loss. Saving to %s', running_avg_loss, bestmodel_save_path)
-        saver.save(sess, bestmodel_save_path, global_step=train_step, latest_filename='checkpoint_best')
+        saver.save(sess, bestmodel_save_path, global_step=train_step, latest_filename='current_model')
         best_loss = running_avg_loss
 
       # flush the summary writer every so often

@@ -785,6 +785,13 @@ class SummarizationModel(object):
       to_return['rl_loss']= self._rl_loss
       to_return['rl_avg_logprobs']= self._rl_avg_logprobs
       to_return['reward_diff'] = self._reward_diff
+    
+    # For debug
+    #   to_return['target_batch'] = tf.squeeze(self._target_batch) # shape (batch_size, max_dec_step)
+    #   to_return['greedy_search'] = tf.transpose(tf.squeeze(self.greedy_search_samples)) # shape (batch_size, max_dec_step)
+    #   to_return['sample'] = tf.transpose(tf.squeeze(self.samples)) # shape (batch_size, max_dec_step)
+    
+
 
     # We feed the collected reward and feed it back to model to update the loss
     return sess.run(to_return, feed_dict)
