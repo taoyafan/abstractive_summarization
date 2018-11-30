@@ -139,8 +139,8 @@ def run_beam_search(sess, model, vocab, batch, dqn = None, dqn_sess = None, dqn_
                         enc_states=enc_states,
                         dec_init_states=states,
                         prev_coverage=prev_coverage,
-                        prev_decoder_outputs= decoder_outputs if FLAGS.intradecoder else tf.stack([], axis=0),
-                        prev_encoder_es = encoder_es if FLAGS.use_temporal_attention else tf.stack([], axis=0))
+                        prev_decoder_outputs=decoder_outputs if FLAGS.intradecoder else tf.stack([], axis=0),
+                        prev_encoder_es=encoder_es if FLAGS.use_temporal_attention else tf.stack([], axis=0))
 
     if FLAGS.ac_training:
       with dqn_graph.as_default():
@@ -181,13 +181,13 @@ def run_beam_search(sess, model, vocab, batch, dqn = None, dqn_sess = None, dqn_
         all_hyps.append(new_hyp)
 
     # Filter and collect any hypotheses that have produced the end token.
-    hyps = [] # will contain hypotheses for the next step
-    for h in sort_hyps(all_hyps): # in order of most likely h
-      if h.latest_token == vocab.word2id(data.STOP_DECODING): # if stop token is reached...
+    hyps = []  # will contain hypotheses for the next step
+    for h in sort_hyps(all_hyps):  # in order of most likely h
+      if h.latest_token == vocab.word2id(data.STOP_DECODING):  # if stop token is reached...
         # If this hypothesis is sufficiently long, put in results. Otherwise discard.
         if steps >= FLAGS.min_dec_steps:
           results.append(h)
-      else: # hasn't reached stop token, so continue to extend this hypothesis
+      else:  # hasn't reached stop token, so continue to extend this hypothesis
         hyps.append(h)
       if len(hyps) == FLAGS.beam_size or len(results) == FLAGS.beam_size:
         # Once we've collected beam_size-many hypotheses for the next step, or beam_size-many complete hypotheses, stop.

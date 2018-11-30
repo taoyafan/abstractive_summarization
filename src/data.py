@@ -34,6 +34,11 @@ UNKNOWN_TOKEN = '[UNK]' # This has a vocab id, which is used to represent out-of
 START_DECODING = '[START]' # This has a vocab id, which is used at the start of every decoder input sequence
 STOP_DECODING = '[STOP]' # This has a vocab id, which is used at the end of untruncated target sequences
 
+PAD_TOKEN_IDX = 1 # This has a vocab id, which is used to pad the encoder input, decoder input and target sequence
+UNKNOWN_TOKEN_IDX = 0 # This has a vocab id, which is used to represent out-of-vocabulary words
+START_DECODING_IDX = 2 # This has a vocab id, which is used at the start of every decoder input sequence
+STOP_DECODING_IDX = 3 # This has a vocab id, which is used at the end of untruncated target sequences
+
 # Note: none of <s>, </s>, [PAD], [UNK], [START], [STOP] should appear in the vocab file.
 
 
@@ -51,9 +56,10 @@ class Vocab(object):
     self._count = 0 # keeps track of total number of words in the Vocab
 
     # [UNK], [PAD], [START] and [STOP] get the ids 0,1,2,3.
-    for w in [UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
-      self._word_to_id[w.lower()] = self._count
-      self._id_to_word[self._count] = w.lower()
+    for i, w in zip([UNKNOWN_TOKEN_IDX, PAD_TOKEN_IDX, START_DECODING_IDX, STOP_DECODING_IDX],
+                    [UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]):
+      self._word_to_id[w] = self._count
+      self._id_to_word[self._count] = w
       self._count += 1
 
     # Read the vocab file and add words up to max_size
@@ -63,11 +69,11 @@ class Vocab(object):
         if len(pieces) != 2:
           print('Warning: incorrectly formatted line in vocabulary file: %s\n' % line)
           continue
-        w = pieces[0].lower()
+        w = pieces[0]
         if w in [SENTENCE_START, SENTENCE_END, UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
           raise Exception('<s>, </s>, [UNK], [PAD], [START] and [STOP] shouldn\'t be in the vocab file, but %s is' % w)
         if w in self._word_to_id:
-          print("Duplicate:",w)
+          print("Duplicate:", w)
           continue
           raise Exception('Duplicated word in vocabulary file: %s' % w)
         self._word_to_id[w] = self._count
@@ -82,8 +88,8 @@ class Vocab(object):
   def word2id(self, word):
     """Returns the id (integer) of a word (string). Returns [UNK] id if word is OOV."""
     if word not in self._word_to_id:
-      return self._word_to_id[UNKNOWN_TOKEN.lower()]
-    return self._word_to_id[word.lower()]
+      return self._word_to_id[UNKNOWN_TOKEN]
+    return self._word_to_id[word]
 
   def id2word(self, word_id):
     """Returns the word (string) corresponding to an id (integer)."""
@@ -132,7 +138,7 @@ class Vocab(object):
     self._wordEmbedding = np.zeros((self.size(), self.word_dim),dtype=np.float32) # replace unknown words with UNKNOWN_TOKEN embedding (zero vector)
     for word,i in sorted_x:
       if word in self.wordDict:
-        self._wordEmbedding[i,:] = self.wordDict[word.lower()]
+        self._wordEmbedding[i,:] = self.wordDict[word]
     print('Word Embedding Reading done.')
 
   def getWordEmbedding(self):
