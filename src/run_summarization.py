@@ -41,6 +41,7 @@ FLAGS = tf.app.flags.FLAGS
 
 # Where to find data
 tf.app.flags.DEFINE_string('data_path', '', 'Path expression to tf.Example datafiles. Can include wildcards to access multiple datafiles.')
+tf.app.flags.DEFINE_string('eval_data_path', '', 'Path expression to tf.Example datafiles. Use these data to eval while in train mode.')
 tf.app.flags.DEFINE_string('vocab_path', '', 'Path expression to text vocabulary file.')
 
 # Important settings
@@ -54,8 +55,8 @@ tf.app.flags.DEFINE_string('log_root', '', 'Root directory for all logging.')
 tf.app.flags.DEFINE_string('exp_name', '', 'Name for experiment. Logs will be saved in a directory with this name, under log_root.')
 
 # batcher parameter, for consistent results, set all these parameters to 1
-tf.app.flags.DEFINE_integer('example_queue_threads', 16, 'Number of example queue threads,')
-tf.app.flags.DEFINE_integer('batch_queue_threads', 4, 'Number of batch queue threads.')
+tf.app.flags.DEFINE_integer('example_queue_threads', 1, 'Number of example queue threads,')
+tf.app.flags.DEFINE_integer('batch_queue_threads', 1, 'Number of batch queue threads.')
 tf.app.flags.DEFINE_integer('bucketing_cache_size', 100, 'Number of bucketing cache size.')
 
 # Hyperparameters
@@ -144,7 +145,7 @@ tf.app.flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (wat
 
 class Seq2Seq(object):
 
-  def calc_running_avg_loss(self, loss, running_avg_loss, step, decay=0.99):
+  def calc_running_avg_loss(self, loss, running_avg_loss, step, decay=0.99, summary_writer = None, name='running_avg_loss'):
     """Calculate the running average loss via exponential decay.
     This is used to implement early stopping w.r.t. a more smooth loss curve than the raw loss curve.
 
@@ -162,13 +163,20 @@ class Seq2Seq(object):
       running_avg_loss = loss
     else:
       running_avg_loss = running_avg_loss * decay + (1 - decay) * loss
-    running_avg_loss = min(running_avg_loss, 12)  # clip
+    # running_avg_loss = min(running_avg_loss, 12)  # clip
     loss_sum = tf.Summary()
-    tag_name = 'running_avg_loss/decay=%f' % (decay)
+    tag_name = '%s/decay=%f' % (name, decay)
     loss_sum.value.add(tag=tag_name, simple_value=running_avg_loss)
-    self.summary_writer.add_summary(loss_sum, step)
-    tf.logging.info('running_avg_loss: %f', running_avg_loss)
-    return running_avg_loss
+    
+    if summary_writer == None :
+      self.summary_writer .add_summary(loss_sum, step)
+      tf.logging.info('{}: {}'.format(name, running_avg_loss))
+      return running_avg_loss
+      
+    summary_writer.add_summary(loss_sum, step)
+    tf.logging.info('{}: {}'.format(name, running_avg_loss))
+    
+    return [summary_writer, running_avg_loss]
 
   def restore_best_model(self):
     """Load bestmodel file from eval directory, add variables for adagrad, and save to train directory"""
@@ -284,6 +292,40 @@ class Seq2Seq(object):
     print("saved.")
     exit()
 
+  def printer(self, results, avg_info, summary_writer):
+    printer_helper = {}
+    printer_helper['pgen_loss'] = results['pgen_loss']
+    if FLAGS.coverage:
+      printer_helper['coverage_loss'] = results['coverage_loss']
+      if FLAGS.rl_training or FLAGS.ac_training:
+        printer_helper['rl_cov_total_loss'] = results['reinforce_cov_total_loss']
+      printer_helper['pointer_cov_total_loss'] = results['pointer_cov_total_loss']
+    if FLAGS.rl_training or FLAGS.ac_training:
+      printer_helper['shared_loss'] = results['shared_loss']
+      printer_helper['rl_loss'] = results['rl_loss']
+      printer_helper['rl_avg_logprobs'] = results['rl_avg_logprobs']
+    if FLAGS.rl_training:
+      printer_helper['sample_r'] = np.mean(results['sampled_sentence_r_values'])
+      printer_helper['greedy_r'] = np.mean(results['greedy_sentence_r_values'])
+      printer_helper['r_diff'] = np.mean(results['reward_diff'])
+    if FLAGS.ac_training:
+      printer_helper['dqn_loss'] = np.mean(self.avg_dqn_loss) if len(self.avg_dqn_loss) > 0 else 0
+  
+    for (k, v) in printer_helper.items():
+      if not np.isfinite(v):
+        raise Exception("{} is not finite. Stopping.".format(k))
+      tf.logging.info('{}: {}\t'.format(k, v))
+
+    tf.logging.info('\n')
+    
+
+    for (k, v) in avg_info.items():
+      summary_writer, avg_info[k] = self.calc_running_avg_loss(np.asscalar(printer_helper[k]), avg_info[k],
+                                                               self.train_step, summary_writer = summary_writer, name=k)
+
+    tf.logging.info('-------------------------------------------')
+    return [summary_writer, avg_info]
+  
   def setup_training(self):
     """Does setup before starting training (run_training)"""
     train_dir = os.path.join(FLAGS.log_root, "train")
@@ -308,7 +350,8 @@ class Seq2Seq(object):
       self.convert_to_coverage_model()
     if FLAGS.restore_best_model:
       self.restore_best_model()
-    saver = tf.train.Saver(max_to_keep=3) # keep 3 checkpoints at a time
+    self.saver = tf.train.Saver(max_to_keep=3) # keep 3 checkpoints at a time
+    self.eval_saver = tf.train.Saver(max_to_keep=3) # keep 3 checkpoints at a time
 
     # Loads pre-trained word-embedding. By default the model learns the embedding.
     if FLAGS.embedding:
@@ -317,7 +360,7 @@ class Seq2Seq(object):
 
     self.sv = tf.train.Supervisor(logdir=train_dir,
                        is_chief=True,
-                       saver=saver,
+                       saver=self.saver,
                        summary_op=None,
                        save_summaries_secs=60, # save summaries for tensorboard every 60 secs
                        save_model_secs=60, # checkpoint every 60 secs
@@ -325,6 +368,8 @@ class Seq2Seq(object):
                        init_feed_dict= {self.model.embedding_place: word_vector} if FLAGS.embedding else None
                        )
     self.summary_writer = self.sv.summary_writer
+    
+    
     self.sess = self.sv.prepare_or_wait_for_session(config=util.get_config())
     if FLAGS.ac_training:
       tf.logging.info('DDQN building graph')
@@ -376,8 +421,22 @@ class Seq2Seq(object):
 
   def run_training(self):
     """Repeatedly runs training iterations, logging loss to screen and writing summaries"""
-    tf.logging.info("Starting run_training")
+    
+    # Set up eval
+    eval_saver = self.eval_saver
+    eval_dir = os.path.join(FLAGS.log_root, "eval") # make a subdir of the root dir for eval data
+    eval_summary_writer = tf.summary.FileWriter(eval_dir)
+    bestmodel_save_path = os.path.join(eval_dir, 'bestmodel') # this is where checkpoints of best models are saved
+    
+    if os.path.exists('{}/eval_best_sample_r.txt'.format(eval_dir)):
+      with open('{}/eval_best_sample_r.txt'.format(eval_dir), 'r') as f:  # Read eval_best_sample_r
+        eval_best_sample_r = float(f.readline())
+    else :
+      eval_best_sample_r = 0
 
+    
+    tf.logging.info("Starting run_training")
+    
     if FLAGS.debug: # start the tensorflow debugger
       self.sess = tf_debug.LocalCLIDebugWrapperSession(self.sess)
       self.sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
@@ -396,8 +455,23 @@ class Seq2Seq(object):
       watcher.start()
     # starting the main thread
     tf.logging.info('Starting Seq2Seq training...')
+    
+    avg_info = {}
+    avg_info['pgen_loss'] = 0 # the eval job keeps a smoother, running average loss to tell it when to implement early stopping
+    if FLAGS.rl_training or FLAGS.ac_training:
+      avg_info['shared_loss'] = 0
+      avg_info['rl_loss'] = 0
+      avg_info['rl_avg_logprobs'] = 0
+    if FLAGS.rl_training:
+      avg_info['greedy_r'] = 0
+      avg_info['sample_r'] = 0
+    eval_avg_info = avg_info
+    
     while True: # repeats until interrupted
       batch = self.batcher.next_batch()
+      
+      batch.avg_reward = avg_info['sample_r']
+      
       t0=time.time()
       if FLAGS.ac_training:
         # For DDQN, we first collect the model output to calculate the reward and Q-estimates
@@ -463,43 +537,58 @@ class Seq2Seq(object):
       self.train_step = results['global_step'] # we need this to update our running average loss
       tf.logging.info('seconds for training step {}: {}'.format(self.train_step, t1-t0))
 
-      printer_helper = {}
-      printer_helper['pgen_loss']= results['pgen_loss']
-      if FLAGS.coverage:
-        printer_helper['coverage_loss'] = results['coverage_loss']
-        if FLAGS.rl_training or FLAGS.ac_training:
-          printer_helper['rl_cov_total_loss']= results['reinforce_cov_total_loss']
-        else:
-          printer_helper['pointer_cov_total_loss'] = results['pointer_cov_total_loss']
-      if FLAGS.rl_training or FLAGS.ac_training:
-        printer_helper['shared_loss'] = results['shared_loss']
-        printer_helper['rl_loss'] = results['rl_loss']
-        printer_helper['rl_avg_logprobs'] = results['rl_avg_logprobs']
-      if FLAGS.rl_training:
-        printer_helper['sampled_r'] = np.mean(results['sampled_sentence_r_values'])
-        printer_helper['greedy_r'] = np.mean(results['greedy_sentence_r_values'])
-        printer_helper['r_diff'] = printer_helper['greedy_r'] - printer_helper['sampled_r']
-      if FLAGS.ac_training:
-        printer_helper['dqn_loss'] = np.mean(self.avg_dqn_loss) if len(self.avg_dqn_loss)>0 else 0
-
-      for (k, v) in printer_helper.items():
-        if not np.isfinite(v):
-          raise Exception("{} is not finite. Stopping.".format(k))
-        tf.logging.info('{}: {}\t'.format(k, v))
-      tf.logging.info('-------------------------------------------')
+      self.summary_writer, avg_info = self.printer(results, avg_info, self.summary_writer)
 
       self.summary_writer.add_summary(summaries, self.train_step) # write the summaries
       if self.train_step % 100 == 0: # flush the summary writer every so often
         self.summary_writer.flush()
+
       if FLAGS.ac_training:
         self.dqn_summary_writer.flush()
+
+      if self.train_step % 20 == 0: # Running eval data
+        # evaluate for 100 * batch_size before comparing the loss
+        # we do this due to memory constraint, best to run eval on different machines with large batch size
+        iteration = 0
+        eval_step = self.train_step
+        tf.logging.info('====================================================================================')
+        while iteration < 5:  # Running 20 iteration each time
+          iteration += 1
+          eval_batch = self.eval_batcher.next_batch()
+          batch.avg_reward = eval_avg_info['sample_r']
+          
+          tf.logging.info('run eval step on seq2seq model.')
+          t0 = time.time()
+          results = self.model.run_eval_step(self.sess, eval_batch, eval_step)
+          t1 = time.time()
+          
+          tf.logging.info('processed_batch: {}, seconds for batch: {}'.format(iteration, t1-t0))
+
+          eval_step = results['global_step']
+          eval_summaries = results['summaries']  # we will write these summaries to tensorboard using summary_writer
+          eval_summary_writer, eval_avg_info = self.printer(results, eval_avg_info, eval_summary_writer)
+
+          eval_summary_writer.add_summary(eval_summaries, eval_step)
+        
+        eval_summary_writer.flush()
+        if eval_avg_info['sample_r'] > eval_best_sample_r:
+          tf.logging.info('Found new best model with %.3f average sample_r. Saving to %s', eval_avg_info['sample_r'],
+                          bestmodel_save_path)
+          eval_saver.save(self.sess, bestmodel_save_path, global_step=self.train_step, latest_filename='checkpoint_best')
+          eval_best_sample_r = eval_avg_info['sample_r']
+
+          with open('{}/eval_best_sample_r.txt'.format(eval_dir), 'w') as f:  # Write eval_best_sample_r to file
+            f.write('{}'.format(eval_best_sample_r))
+            
+        tf.logging.info('====================================================================================')
+
       if self.train_step > FLAGS.max_iter: break
 
   def dqn_training(self):
     """ training the DDQN network."""
     try:
       while True:
-        if self.dqn_train_step == FLAGS.dqn_pretrain_steps: raise SystemExit()
+        if self.dqn_train_step == FLAGS.dqn_pretrain_steps:  raise SystemExit()
         _t = time.time()
         self.avg_dqn_loss = []
         avg_dqn_target_loss = []
@@ -549,7 +638,7 @@ class Seq2Seq(object):
     sess = tf.Session(config=util.get_config())
 
     if FLAGS.embedding:
-      sess.run(tf.global_variables_initializer(),feed_dict={self.model.embedding_place:self.word_vector})
+      sess.run(tf.global_variables_initializer(), feed_dict={self.model.embedding_place:self.word_vector})
     eval_dir = os.path.join(FLAGS.log_root, "eval") # make a subdir of the root dir for eval data
     bestmodel_save_path = os.path.join(eval_dir, 'bestmodel') # this is where checkpoints of best models are saved
     self.summary_writer = tf.summary.FileWriter(eval_dir)
@@ -569,6 +658,11 @@ class Seq2Seq(object):
       replay_buffer = ReplayBuffer(self.dqn_hps)
 
     running_avg_loss = 0 # the eval job keeps a smoother, running average loss to tell it when to implement early stopping
+    running_avg_shared_loss = 0
+    running_avg_rl_loss = 0
+    running_rl_avg_logprobs = 0
+    running_avg_greedy_r = 0
+    running_avg_sample_r = 0
     best_loss = self.restore_best_eval_model()  # will hold the best loss achieved so far
     train_step = 0
 
@@ -576,13 +670,21 @@ class Seq2Seq(object):
       _ = util.load_ckpt(saver, sess) # load a new checkpoint
       if FLAGS.ac_training:
         _ = util.load_dqn_ckpt(dqn_saver, dqn_sess) # load a new checkpoint
+
       processed_batch = 0
       avg_losses = []
+      avg_shared_loss = []
+      avg_rl_loss = []
+      avg_rl_avg_logprobs = []
+      avg_greedy_r = []
+      avg_sample_r = []
       # evaluate for 100 * batch_size before comparing the loss
       # we do this due to memory constraint, best to run eval on different machines with large batch size
-      while processed_batch < 100*FLAGS.batch_size:
+      while processed_batch < 50*FLAGS.batch_size:
         processed_batch += FLAGS.batch_size
         batch = self.batcher.next_batch() # get the next batch
+        batch.avg_reward = avg_sample_r[-1] if len(avg_sample_r)!= 0 else 0
+        
         if FLAGS.ac_training:
           t0 = time.time()
           transitions = self.model.collect_dqn_transitions(sess, batch, train_step, batch.max_art_oovs) # len(batch_size * k * max_dec_steps)
@@ -640,17 +742,17 @@ class Seq2Seq(object):
             printer_helper['rl_cov_total_loss']= results['reinforce_cov_total_loss']
           loss = printer_helper['pointer_cov_total_loss'] = results['pointer_cov_total_loss']
         if FLAGS.rl_training or FLAGS.ac_training:
-          printer_helper['shared_loss'] = results['shared_loss']
-          printer_helper['rl_loss'] = results['rl_loss']
-          printer_helper['rl_avg_logprobs'] = results['rl_avg_logprobs']
+          shared_loss = printer_helper['shared_loss'] = results['shared_loss']
+          rl_loss = printer_helper['rl_loss'] = results['rl_loss']
+          rl_avg_logprobs = printer_helper['rl_avg_logprobs'] = results['rl_avg_logprobs']
         if FLAGS.rl_training:
-          printer_helper['sampled_r'] = np.mean(results['sampled_sentence_r_values'])
-          printer_helper['greedy_r'] = np.mean(results['greedy_sentence_r_values'])
-          printer_helper['r_diff'] = printer_helper['greedy_r'] - printer_helper['sampled_r']
+          sampled_r = printer_helper['sampled_r'] = np.mean(results['sampled_sentence_r_values'])
+          greedy_r = printer_helper['greedy_r'] = np.mean(results['greedy_sentence_r_values'])
+          printer_helper['reward_diff'] = np.mean(results['reward_diff'])
         if FLAGS.ac_training:
           printer_helper['dqn_loss'] = np.mean(self.avg_dqn_loss) if len(self.avg_dqn_loss) > 0 else 0
 
-        for (k,v) in printer_helper.items():
+        for(k, v) in printer_helper.items():
           if not np.isfinite(v):
             raise Exception("{} is not finite. Stopping.".format(k))
           tf.logging.info('{}: {}\t'.format(k,v))
@@ -661,13 +763,40 @@ class Seq2Seq(object):
         self.summary_writer.add_summary(summaries, train_step)
 
         # calculate running avg loss
-        avg_losses.append(self.calc_running_avg_loss(np.asscalar(loss), running_avg_loss, train_step))
+
+        tf.logging.info('\n')
+        avg_losses.append(self.calc_running_avg_loss(np.asscalar(loss), running_avg_loss, train_step, name='running_avg_loss'))
+
+        if FLAGS.rl_training or FLAGS.ac_training:
+          avg_shared_loss.append(self.calc_running_avg_loss(np.asscalar(shared_loss), running_avg_shared_loss, train_step, name='shared_loss'))
+          avg_rl_loss.append(self.calc_running_avg_loss(np.asscalar(rl_loss), running_avg_rl_loss, train_step, name='rl_loss'))
+          avg_rl_avg_logprobs.append(self.calc_running_avg_loss(np.asscalar(rl_avg_logprobs), running_rl_avg_logprobs, train_step, name='rl_avg_logprobs'))
+        if FLAGS.rl_training:
+          avg_sample_r.append(self.calc_running_avg_loss(np.asscalar(sampled_r), running_avg_sample_r, train_step, name='sampled_r'))
+          avg_greedy_r.append(self.calc_running_avg_loss(np.asscalar(greedy_r), running_avg_greedy_r, train_step, name='greedy_r'))
         tf.logging.info('-------------------------------------------')
 
       running_avg_loss = np.mean(avg_losses)
-      tf.logging.info('==========================================')
+
+      if FLAGS.rl_training or FLAGS.ac_training:
+        running_avg_shared_loss = np.mean(avg_shared_loss)
+        running_avg_rl_loss = np.mean(avg_rl_loss)
+        running_rl_avg_logprobs = np.mean(rl_avg_logprobs)
+      if FLAGS.rl_training:
+        running_avg_greedy_r = np.mean(avg_greedy_r)
+        running_avg_sample_r = np.mean(avg_sample_r)
+
+
+      tf.logging.info('====================================================================================')
       tf.logging.info('best_loss: {}\trunning_avg_loss: {}\t'.format(best_loss, running_avg_loss))
-      tf.logging.info('==========================================')
+      if FLAGS.rl_training or FLAGS.ac_training:
+        tf.logging.info('running_avg_shared_loss: {}'.format(running_avg_shared_loss))
+        tf.logging.info('running_avg_rl_loss: {}'.format(running_avg_rl_loss))
+        tf.logging.info('running_rl_avg_logprobs: {}\t'.format(running_rl_avg_logprobs))
+      if FLAGS.rl_training:
+        tf.logging.info('running_avg_greedy_r: {}'.format(running_avg_greedy_r))
+        tf.logging.info('running_avg_sample_r: {}\t'.format(running_avg_sample_r))
+      tf.logging.info('====================================================================================')
 
       # If running_avg_loss is best so far, save this checkpoint (early stopping).
       # These checkpoints will appear as bestmodel-<iteration_number> in the eval dir
@@ -759,23 +888,25 @@ class Seq2Seq(object):
 
     # Create a batcher object that will create minibatches of data
     self.batcher = Batcher(FLAGS.data_path, self.vocab, self.hps, single_pass=FLAGS.single_pass, decode_after=FLAGS.decode_after)
-
     tf.set_random_seed(111) # a seed value for randomness
 
     if self.hps.mode == 'train':
       print("creating model...")
+      
+      self.eval_batcher = Batcher(FLAGS.eval_data_path, self.vocab, self.hps, single_pass=FLAGS.single_pass,
+                             decode_after=FLAGS.decode_after)
       self.model = SummarizationModel(self.hps, self.vocab)
       if FLAGS.ac_training:
         # current DQN with paramters \Psi
-        self.dqn = DQN(self.dqn_hps,'current')
+        self.dqn = DQN(self.dqn_hps, 'current')
         # target DQN with paramters \Psi^{\prime}
-        self.dqn_target = DQN(self.dqn_hps,'target')
+        self.dqn_target = DQN(self.dqn_hps, 'target')
       self.setup_training()
     elif self.hps.mode == 'eval':
       self.model = SummarizationModel(self.hps, self.vocab)
       if FLAGS.ac_training:
-        self.dqn = DQN(self.dqn_hps,'current')
-        self.dqn_target = DQN(self.dqn_hps,'target')
+        self.dqn = DQN(self.dqn_hps, 'current')
+        self.dqn_target = DQN(self.dqn_hps, 'target')
       self.run_eval()
     elif self.hps.mode == 'decode':
       decode_model_hps = self.hps  # This will be the hyperparameters for the decoder model
