@@ -307,12 +307,12 @@ def attention_decoder(_hps,
     vocab_dists = []
     final_dists = []
     p_gens = []
-    samples = [] # this holds the words chosen by sampling based on the final distribution for each decoding step, list of max_dec_steps of (batch_size, 1)
-    greedy_search_samples = [] # this holds the words chosen by greedy search (taking the max) on the final distribution for each decoding step, list of max_dec_steps of (batch_size, 1)
-    sampling_rewards = [] # list of size max_dec_steps (batch_size, k)
-    greedy_rewards = [] # list of size max_dec_steps (batch_size, k)
+    samples = []  # this holds the words chosen by sampling based on the final distribution for each decoding step, list of max_dec_steps of (batch_size, 1)
+    greedy_search_samples = []  # this holds the words chosen by greedy search (taking the max) on the final distribution for each decoding step, list of max_dec_steps of (batch_size, 1)
+    sampling_rewards = []  # list of size max_dec_steps (batch_size, k)
+    greedy_rewards = []  # list of size max_dec_steps (batch_size, k)
     state = _dec_in_state
-    coverage = prev_coverage # initialize coverage to None or whatever was passed in
+    coverage = prev_coverage  # initialize coverage to None or whatever was passed in
     context_vector = array_ops.zeros([batch_size, attn_size])
     context_decoder_vector = array_ops.zeros([batch_size, decoder_attn_size])
     context_vector.set_shape([None, attn_size])  # Ensure the second shape of attention vectors is set.
@@ -326,7 +326,7 @@ def attention_decoder(_hps,
       if i > 0:
         variable_scope.get_variable_scope().reuse_variables()
 
-      if _hps.mode in ['train','eval'] and _hps.scheduled_sampling and i > 0: # start scheduled sampling after we received the first decoder's output
+      if _hps.mode in ['train', 'eval'] and _hps.scheduled_sampling and i > 0: # start scheduled sampling after we received the first decoder's output
         # modify the input to next decoder using scheduled sampling
         if FLAGS.scheduled_sampling_final_dist:
           inp = scheduled_sampling(_hps, sampling_probability, final_dist, embedding, inp, alpha)
@@ -387,7 +387,7 @@ def attention_decoder(_hps,
         score = tf.nn.xw_plus_b(output, w_out, v_out)
         if _hps.scheduled_sampling and not _hps.greedy_scheduled_sampling:
           # Gumbel reparametrization trick: https://arxiv.org/abs/1704.06970
-          U = tf.random_uniform(score.get_shape(),10e-12,(1-10e-12)) # add a small number to avoid log(0)
+          U = tf.random_uniform(score.get_shape(), 10e-12, (1-10e-12))  # add a small number to avoid log(0)
           G = -tf.log(-tf.log(U))
           score = score + G
         vocab_scores.append(score) # apply the linear layer
@@ -406,9 +406,9 @@ def attention_decoder(_hps,
       # this will take the final_dist and sample from it for a total count of k (k samples)
       one_hot_k_samples = tf.distributions.Multinomial(total_count=1., probs=final_dist).sample(
         _hps.k)  # sample k times according to https://arxiv.org/pdf/1705.04304.pdf, size (k, batch_size, extended_vsize)
-      k_argmax = tf.argmax(one_hot_k_samples, axis=2, output_type=tf.int32) # (k, batch_size)
+      k_argmax = tf.argmax(one_hot_k_samples, axis=2, output_type=tf.int32)  # (k, batch_size)
       k_sample = tf.transpose(k_argmax) # shape (batch_size, k)
-      greedy_search_prob, greedy_search_sample = tf.nn.top_k(final_dist, k=_hps.k) # (batch_size, k)
+      greedy_search_prob, greedy_search_sample = tf.nn.top_k(final_dist, k=_hps.k)  # (batch_size, k)
       greedy_search_samples.append(greedy_search_sample)
       samples.append(k_sample)
       if FLAGS.use_discounted_rewards:
@@ -431,12 +431,12 @@ def attention_decoder(_hps,
       _sampling_rewards = []
       _greedy_rewards = []
       for _ in range(_hps.k):
-        rl_fscore = rouge_l_fscore(tf.transpose(tf.stack(samples)[:, :, _]), target_batch) # shape (batch_size, 1)
+        rl_fscore = rouge_l_fscore(tf.transpose(tf.stack(samples)[:, :, _]), target_batch)  # shape (batch_size, 1)
         _sampling_rewards.append(tf.reshape(rl_fscore, [-1, 1]))
         rl_fscore = rouge_l_fscore(tf.transpose(tf.stack(greedy_search_samples)[:, :, _]), target_batch)  # shape (batch_size, 1)
         _greedy_rewards.append(tf.reshape(rl_fscore, [-1, 1]))
-      sampling_rewards = tf.squeeze(tf.stack(_sampling_rewards, axis=1), axis=-1) # (batch_size, k)
-      greedy_rewards = tf.squeeze(tf.stack(_greedy_rewards, axis=1), axis=-1) # (batch_size, k)
+      sampling_rewards = tf.squeeze(tf.stack(_sampling_rewards, axis=1), axis=-1)  # (batch_size, k)
+      greedy_rewards = tf.squeeze(tf.stack(_greedy_rewards, axis=1), axis=-1)  # (batch_size, k)
     # If using coverage, reshape it
     if coverage is not None:
       coverage = array_ops.reshape(coverage, [batch_size, -1])
@@ -452,8 +452,8 @@ def scheduled_sampling(hps, sampling_probability, output, embedding, inp, alpha 
   def soft_argmax(alpha, _output):
     new_oov_scores = tf.reshape(_output[:, 0] + tf.reduce_sum(_output[:, vocab_size:], axis=1),
                                 [-1, 1])  # add score for all OOV to the UNK score
-    _output = tf.concat([new_oov_scores, _output[:, 1:vocab_size]], axis=1) # select only the vocab_size outputs
-    _output = _output / tf.reshape(tf.reduce_sum(output, axis=1), [-1, 1]) # re-normalize scores
+    _output = tf.concat([new_oov_scores, _output[:, 1:vocab_size]], axis=1)  # select only the vocab_size outputs
+    _output = _output / tf.reshape(tf.reduce_sum(output, axis=1), [-1, 1])  # re-normalize scores
 
     #alpha_exp = tf.exp(alpha * _output) # (batch_size, vocab_size)
     #one_hot_scores = alpha_exp / tf.reshape(tf.reduce_sum(alpha_exp, axis=1),[-1,1]) #(batch_size, vocab_size)
