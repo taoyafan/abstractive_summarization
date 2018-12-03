@@ -11,7 +11,7 @@ coverage = False
 
 Train mode:
 
---mode=train --data_path=../finished_files/chunked/train_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=baseline --batch_size=32
+--mode=train --data_path=../finished_files/chunked/train_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=baseline --batch_size=32 --eval_data_path=../finished_files/chunked/test_*
 
 =====================
 
