@@ -57,12 +57,12 @@ class SummarizationModel(object):
     with tf.name_scope('summaries_{}'.format(var_name)):
       mean = tf.reduce_mean(var)
       tf.summary.scalar('mean', mean)
-      with tf.name_scope('stddev'):
-        stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-      tf.summary.scalar('stddev', stddev)
-      tf.summary.scalar('max', tf.reduce_max(var))
-      tf.summary.scalar('min', tf.reduce_min(var))
-      tf.summary.histogram('histogram', var)
+      # with tf.name_scope('stddev'):
+      #   stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+      # tf.summary.scalar('stddev', stddev)
+      # tf.summary.scalar('max', tf.reduce_max(var))
+      # tf.summary.scalar('min', tf.reduce_min(var))
+      # tf.summary.histogram('histogram', var)
 
   def _add_placeholders(self):
     """Add placeholders to the graph. These are entry points for any input data."""
@@ -368,18 +368,30 @@ class SummarizationModel(object):
             # use the reward of last step, since we use the reward of the whole sentence in this case
             self._sampled_rouges.append(self.sampling_rewards[:, _])  # shape (batch_size)
             self._greedy_rouges.append(self.greedy_rewards[:, _])  # shape (batch_size)
-          if FLAGS.self_critic:
-            self._reward_diff.append((self._sampled_rouges[_] - self._greedy_rouges[_])) # self._avg_reward
+            
+          # Use either greedy or sampled reward as optimized object
+          if FLAGS.rising_greedy_r:
+            # use greedy reward to calculate rl_losses
+            if FLAGS.self_critic:
+              self._reward_diff.append((self._greedy_rouges[_] - self._sampled_rouges[_])) # self._avg_reward
+            else:
+              self._reward_diff.append(self._greedy_rouges[_])
           else:
-            self._reward_diff.append(self._sampled_rouges[_])
+            if FLAGS.self_critic:
+              self._reward_diff.append((self._sampled_rouges[_] - self._greedy_rouges[_])) # self._avg_reward
+            else:
+              self._reward_diff.append(self._sampled_rouges[_])
 
 
         # Calculate rl_loss_per_step and rl_losses for each sample batch using sample results
         for dec_step, dist in enumerate(self.final_dists):
           
-          # Change the Eq. 15 in https://arxiv.org/pdf/1705.04304.pdf to use greedy results to calculate rl_losses
-          # _targets = self.greedy_search_samples[dec_step]  # The indices of the sampled words. shape (batch_size, k)
-          _targets = self.samples[dec_step]  # The indices of the sampled words. shape (batch_size, k)
+          # Use either greedy or sampled reward as optimized object
+          if FLAGS.rising_greedy_r:
+            # Change the Eq. 15 in https://arxiv.org/pdf/1705.04304.pdf to use greedy reward to calculate rl_losses
+            _targets = self.greedy_search_samples[dec_step]  # The indices of the sampled words. shape (batch_size, k)
+          else:
+            _targets = self.samples[dec_step]  # The indices of the sampled words. shape (batch_size, k)
 
           for _k, targets in enumerate(tf.unstack(_targets, axis=1)):  # list of k samples of size (batch_size)
             indices = tf.stack((batch_nums, targets), axis=1)  # shape (batch_size, 2)

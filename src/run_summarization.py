@@ -36,6 +36,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops.distributions import bernoulli
+import json
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -96,6 +97,7 @@ tf.app.flags.DEFINE_float('eta', 0, 'RL/MLE scaling factor, 1 means use RL loss,
 tf.app.flags.DEFINE_boolean('fixed_eta', False, 'Use fixed value for eta or adaptive based on global step')
 tf.app.flags.DEFINE_float('gamma', 0.99, 'discount factor')
 tf.app.flags.DEFINE_string('reward_function', 'rouge_l/f_score', 'either bleu or one of the rouge measures (rouge_1/f_score,rouge_2/f_score,rouge_l/f_score)')
+tf.app.flags.DEFINE_boolean('rising_greedy_r', False, 'If true, use greedy reward as the optimized object, else optimize sample reward')
 
 # parameters of DDQN model
 tf.app.flags.DEFINE_boolean('ac_training', False, 'Use Actor-Critic learning by DDQN.')
@@ -326,6 +328,14 @@ class Seq2Seq(object):
     tf.logging.info('-------------------------------------------')
     return [summary_writer, avg_info]
   
+  def write_info(self, avg_info, eval_avg_info, eval_best_info, file_name):
+    with open(file_name, "w") as f:
+      json.dump(avg_info, f)
+      f.write('\n')
+      json.dump(eval_avg_info, f)
+      f.write('\n')
+      json.dump(eval_best_info, f)
+  
   def setup_training(self):
     """Does setup before starting training (run_training)"""
     train_dir = os.path.join(FLAGS.log_root, "train")
@@ -427,12 +437,27 @@ class Seq2Seq(object):
     eval_dir = os.path.join(FLAGS.log_root, "eval") # make a subdir of the root dir for eval data
     eval_summary_writer = tf.summary.FileWriter(eval_dir)
     bestmodel_save_path = os.path.join(eval_dir, 'bestmodel') # this is where checkpoints of best models are saved
-    
-    if os.path.exists('{}/eval_best_sample_r.txt'.format(eval_dir)):
-      with open('{}/eval_best_sample_r.txt'.format(eval_dir), 'r') as f:  # Read eval_best_sample_r
-        eval_best_sample_r = float(f.readline())
+
+    if os.path.exists('{}/train_eval_info.txt'.format(eval_dir)):
+      with open('{}/train_eval_info.txt'.format(eval_dir), 'r') as f:  # Read eval_best_sample_r
+        line = f.readline()
+        avg_info = json.loads(line)
+        line = f.readline()
+        eval_avg_info = json.loads(line)
+        line = f.readline()
+        eval_best_info = json.loads(line)
     else :
-      eval_best_sample_r = 0
+      avg_info = {}
+      avg_info['pgen_loss'] = 0  # the eval job keeps a smoother, running average loss to tell it when to implement early stopping
+      if FLAGS.rl_training or FLAGS.ac_training:
+        avg_info['shared_loss'] = 0
+        avg_info['rl_loss'] = 0
+        avg_info['rl_avg_logprobs'] = 0
+      if FLAGS.rl_training:
+        avg_info['greedy_r'] = 0
+        avg_info['sample_r'] = 0
+      eval_avg_info = avg_info.copy()
+      eval_best_info = avg_info.copy()
 
     
     tf.logging.info("Starting run_training")
@@ -456,16 +481,7 @@ class Seq2Seq(object):
     # starting the main thread
     tf.logging.info('Starting Seq2Seq training...')
     
-    avg_info = {}
-    avg_info['pgen_loss'] = 0 # the eval job keeps a smoother, running average loss to tell it when to implement early stopping
-    if FLAGS.rl_training or FLAGS.ac_training:
-      avg_info['shared_loss'] = 0
-      avg_info['rl_loss'] = 0
-      avg_info['rl_avg_logprobs'] = 0
-    if FLAGS.rl_training:
-      avg_info['greedy_r'] = 0
-      avg_info['sample_r'] = 0
-    eval_avg_info = avg_info.copy()
+
     
     while True: # repeats until interrupted
       batch = self.batcher.next_batch()
@@ -546,12 +562,13 @@ class Seq2Seq(object):
       if FLAGS.ac_training:
         self.dqn_summary_writer.flush()
 
-      if self.train_step % 100 == 0: # Running eval data
+      if self.train_step % 15 == 0: # Running eval data
         # we do this due to memory constraint, best to run eval on different machines with large batch size
         iteration = 0
         eval_step = self.train_step
         tf.logging.info('====================================================================================')
-        while iteration < 10:  # Running 20 iteration each time
+        self.model._hps = self.model._hps._replace(sampling_probability=1)
+        while iteration < 5:  # Running 20 iteration each time
           iteration += 1
           eval_batch = self.eval_batcher.next_batch()
           batch.avg_reward = eval_avg_info['sample_r']
@@ -568,17 +585,18 @@ class Seq2Seq(object):
           eval_summary_writer, eval_avg_info = self.printer(results, eval_avg_info, eval_summary_writer)
 
           eval_summary_writer.add_summary(eval_summaries, eval_step)
-        
+
+        self.model._hps = self.model._hps._replace(sampling_probability=self.hps.sampling_probability)
         eval_summary_writer.flush()
-        if eval_avg_info['sample_r'] > eval_best_sample_r:
-          tf.logging.info('Found new best model with %.3f average sample_r. Saving to %s', eval_avg_info['sample_r'],
+        if eval_avg_info['greedy_r'] > eval_best_info['greedy_r']:
+          tf.logging.info('Found new best model with %.3f average greedy_r. Saving to %s', eval_avg_info['greedy_r'],
                           bestmodel_save_path)
           eval_saver.save(self.sess, bestmodel_save_path, global_step=self.train_step, latest_filename='checkpoint_best')
-          eval_best_sample_r = eval_avg_info['sample_r']
-
-          with open('{}/eval_best_sample_r.txt'.format(eval_dir), 'w') as f:  # Write eval_best_sample_r to file
-            f.write('{}'.format(eval_best_sample_r))
-            
+          eval_best_info = eval_avg_info.copy()
+          eval_best_info['iteration'] = int(self.train_step)
+          
+          
+        self.write_info(avg_info, eval_avg_info, eval_best_info, '{}/train_eval_info.txt'.format(eval_dir))
         tf.logging.info('====================================================================================')
 
       if self.train_step > FLAGS.max_iter: break
@@ -879,7 +897,7 @@ class Seq2Seq(object):
     hps_dict = {}
     for key, val in flags.items(): # for each flag
       if key in hparam_list: # if it's in the list
-        hps_dict[key] = val # add it to the dict
+        hps_dict[key] = val.value # add it to the dict
     if FLAGS.ac_training:
       hps_dict.update({'dqn_input_feature_len':(FLAGS.dec_hidden_dim)})
     self.hps = namedtuple("HParams", hps_dict.keys())(**hps_dict)
@@ -898,7 +916,7 @@ class Seq2Seq(object):
       hps_dict = {}
       for key,val in flags.items(): # for each flag
         if key in hparam_list: # if it's in the list
-          hps_dict[key] = val # add it to the dict
+          hps_dict[key] = val.value # add it to the dict
       hps_dict.update({'dqn_input_feature_len': (FLAGS.dec_hidden_dim)})
       hps_dict.update({'vocab_size': self.vocab.size()})
       self.dqn_hps = namedtuple("HParams", hps_dict.keys())(**hps_dict)
