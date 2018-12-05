@@ -139,6 +139,14 @@ class SummarizationModel(object):
     with tf.variable_scope('encoder'):
       cell_fw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
       cell_bw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
+      
+      cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=self._hps.dropout_keep_p,
+                                              output_keep_prob=self._hps.dropout_keep_p,
+                                              state_keep_prob=self._hps.dropout_keep_p)
+      cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=self._hps.dropout_keep_p,
+                                              output_keep_prob=self._hps.dropout_keep_p,
+                                              state_keep_prob=self._hps.dropout_keep_p)
+
       (encoder_outputs, (fw_st, bw_st)) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, emb_enc_inputs, dtype=tf.float32, sequence_length=seq_len, swap_memory=True)
       encoder_outputs = tf.concat(axis=2, values=encoder_outputs) # concatenate the forwards and backwards states
     return encoder_outputs, fw_st, bw_st
@@ -186,6 +194,9 @@ class SummarizationModel(object):
     """
     hps = self._hps
     cell = tf.contrib.rnn.LSTMCell(hps.dec_hidden_dim, state_is_tuple=True, initializer=self.rand_unif_init)
+    cell = tf.nn.rnn_cell.DropoutWrapper(cell, input_keep_prob=self._hps.dropout_keep_p,
+                                            output_keep_prob=self._hps.dropout_keep_p,
+                                            state_keep_prob=self._hps.dropout_keep_p)
 
     prev_coverage = self.prev_coverage if (hps.mode=="decode" and hps.coverage) else None # In decode mode, we run attention_decoder one step at a time and so need to pass in the previous step's coverage vector each time
     prev_decoder_outputs = self.prev_decoder_outputs if (hps.intradecoder and hps.mode=="decode") else tf.stack([],axis=0)
@@ -925,6 +936,7 @@ class SummarizationModel(object):
 
     return results['ids'], results['probs'], new_states, attn_dists, final_dists, p_gens, new_coverage, output, temporal_e
 
+
 def _mask_and_avg(values, padding_mask):
   """Applies mask to values then returns overall average (a scalar)
 
@@ -940,6 +952,7 @@ def _mask_and_avg(values, padding_mask):
   values_per_step = [v * padding_mask[:,dec_step] for dec_step,v in enumerate(values)] # list of k
   values_per_ex = sum(values_per_step)/dec_lens # shape (batch_size); normalized value for each batch member
   return tf.reduce_mean(values_per_ex) # overall average
+
 
 def _coverage_loss(attn_dists, padding_mask):
   """Calculates the coverage loss from the attention distributions.

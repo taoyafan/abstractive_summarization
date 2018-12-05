@@ -50,6 +50,7 @@ tf.app.flags.DEFINE_string('mode', 'train', 'must be one of train/eval/decode')
 tf.app.flags.DEFINE_boolean('single_pass', False, 'For decode mode only. If True, run eval on the full dataset using a fixed checkpoint, i.e. take the current checkpoint, and use it to produce one summary for each example in the dataset, write the summaries to file and then get ROUGE scores for the whole dataset. If False (default), run concurrent decoding, i.e. repeatedly load latest checkpoint, use it to produce summaries for randomly-chosen examples and log the results to screen, indefinitely.')
 tf.app.flags.DEFINE_integer('decode_after', 0, 'skip already decoded docs')
 tf.app.flags.DEFINE_string('decode_from', 'train', 'Decode from train/eval model.')
+tf.app.flags.DEFINE_float('dropout_keep_p', 1, 'Drop out keep probability of input, output and state.')
 
 # Where to save output
 tf.app.flags.DEFINE_string('log_root', '', 'Root directory for all logging.')
@@ -562,13 +563,14 @@ class Seq2Seq(object):
       if FLAGS.ac_training:
         self.dqn_summary_writer.flush()
 
-      if self.train_step % 15 == 0: # Running eval data
+      if self.train_step % 45 == 0: # Running eval data
         # we do this due to memory constraint, best to run eval on different machines with large batch size
         iteration = 0
         eval_step = self.train_step
         tf.logging.info('====================================================================================')
         self.model._hps = self.model._hps._replace(sampling_probability=1)
-        while iteration < 5:  # Running 20 iteration each time
+        self.model._hps = self.model._hps._replace(dropout_keep_p=1)
+        while iteration < 10:  # Running 20 iteration each time
           iteration += 1
           eval_batch = self.eval_batcher.next_batch()
           batch.avg_reward = eval_avg_info['sample_r']
@@ -587,6 +589,7 @@ class Seq2Seq(object):
           eval_summary_writer.add_summary(eval_summaries, eval_step)
 
         self.model._hps = self.model._hps._replace(sampling_probability=self.hps.sampling_probability)
+        self.model._hps = self.model._hps._replace(dropout_keep_p=self.hps.dropout_keep_p)
         eval_summary_writer.flush()
         if eval_avg_info['greedy_r'] > eval_best_info['greedy_r']:
           tf.logging.info('Found new best model with %.3f average greedy_r. Saving to %s', eval_avg_info['greedy_r'],
@@ -893,7 +896,7 @@ class Seq2Seq(object):
     'trunc_norm_init_std', 'max_grad_norm', 
     'emb_dim', 'batch_size', 'max_dec_steps', 'max_enc_steps',
     'dqn_scheduled_sampling', 'dqn_sleep_time', 'E2EBackProp',
-    'coverage', 'cov_loss_wt', 'pointer_gen', 'convert_version_old_to_new']
+    'coverage', 'cov_loss_wt', 'pointer_gen', 'convert_version_old_to_new', 'dropout_keep_p']
     hps_dict = {}
     for key, val in flags.items(): # for each flag
       if key in hparam_list: # if it's in the list
