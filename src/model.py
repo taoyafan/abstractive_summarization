@@ -287,7 +287,7 @@ class SummarizationModel(object):
       # Add the decoder.
       with tf.variable_scope('decoder'):
         (self.decoder_outputs, self._dec_out_state, self.attn_dists, self.p_gens, self.coverage, self.vocab_scores,
-         self.final_dists, self.samples, self.greedy_search_samples, self.temporal_es,
+         self.final_dists, self.sample_dists, self.samples, self.greedy_search_samples, self.temporal_es,
          self.sampling_rewards, self.greedy_rewards) = self._add_decoder(emb_dec_inputs, embedding)
 
       if FLAGS.use_discounted_rewards and hps.rl_training and hps.mode in ['train', 'eval']:
@@ -395,7 +395,13 @@ class SummarizationModel(object):
 
 
         # Calculate rl_loss_per_step and rl_losses for each sample batch using sample results
-        for dec_step, dist in enumerate(self.final_dists):
+
+        if FLAGS.rising_greedy_r:
+          dists = self.final_dists
+        else:
+          dists = self.sample_dists
+          
+        for dec_step, dist in enumerate(dists):
           
           # Use either greedy or sampled reward as optimized object
           if FLAGS.rising_greedy_r:

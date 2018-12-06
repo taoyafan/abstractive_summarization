@@ -98,7 +98,7 @@ tf.app.flags.DEFINE_float('eta', 0, 'RL/MLE scaling factor, 1 means use RL loss,
 tf.app.flags.DEFINE_boolean('fixed_eta', False, 'Use fixed value for eta or adaptive based on global step')
 tf.app.flags.DEFINE_float('gamma', 0.99, 'discount factor')
 tf.app.flags.DEFINE_string('reward_function', 'rouge_l/f_score', 'either bleu or one of the rouge measures (rouge_1/f_score,rouge_2/f_score,rouge_l/f_score)')
-tf.app.flags.DEFINE_boolean('rising_greedy_r', False, 'If true, use greedy reward as the optimized object, else optimize sample reward')
+tf.app.flags.DEFINE_boolean('rising_greedy_r', True, 'If true, use greedy reward as the optimized object, else optimize sample reward')
 
 # parameters of DDQN model
 tf.app.flags.DEFINE_boolean('ac_training', False, 'Use Actor-Critic learning by DDQN.')
