@@ -57,8 +57,8 @@ tf.app.flags.DEFINE_string('log_root', '', 'Root directory for all logging.')
 tf.app.flags.DEFINE_string('exp_name', '', 'Name for experiment. Logs will be saved in a directory with this name, under log_root.')
 
 # batcher parameter, for consistent results, set all these parameters to 1
-tf.app.flags.DEFINE_integer('example_queue_threads', 1, 'Number of example queue threads,')
-tf.app.flags.DEFINE_integer('batch_queue_threads', 1, 'Number of batch queue threads.')
+tf.app.flags.DEFINE_integer('example_queue_threads', 30, 'Number of example queue threads,')
+tf.app.flags.DEFINE_integer('batch_queue_threads', 4, 'Number of batch queue threads.')
 tf.app.flags.DEFINE_integer('bucketing_cache_size', 100, 'Number of bucketing cache size.')
 
 # Hyperparameters
@@ -374,7 +374,7 @@ class Seq2Seq(object):
                        saver=self.saver,
                        summary_op=None,
                        save_summaries_secs=60, # save summaries for tensorboard every 60 secs
-                       save_model_secs=60, # checkpoint every 60 secs
+                       save_model_secs=600, # checkpoint every 60 secs
                        global_step=self.model.global_step,
                        init_feed_dict= {self.model.embedding_place: word_vector} if FLAGS.embedding else None
                        )
@@ -400,7 +400,7 @@ class Seq2Seq(object):
                            saver=dqn_saver,
                            summary_op=None,
                            save_summaries_secs=60, # save summaries for tensorboard every 60 secs
-                           save_model_secs=60, # checkpoint every 60 secs
+                           save_model_secs=600, # checkpoint every 60 secs
                            global_step=self.dqn.global_step,
                            )
         self.dqn_summary_writer = self.dqn_sv.summary_writer
@@ -570,7 +570,7 @@ class Seq2Seq(object):
         tf.logging.info('====================================================================================')
         self.model._hps = self.model._hps._replace(sampling_probability=1)
         self.model._hps = self.model._hps._replace(dropout_keep_p=1)
-        while iteration < 10:  # Running 20 iteration each time
+        while iteration < 5:  # Running 20 iteration each time
           iteration += 1
           eval_batch = self.eval_batcher.next_batch()
           batch.avg_reward = eval_avg_info['sample_r']
