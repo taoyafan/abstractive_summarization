@@ -1,0 +1,10 @@
+
+exp_name = noself_critic_lr=1
+lr = 1
+sampling_probability = 1
+eta = 1
+rl_training = True
+
+Train mode:
+
+--mode=train --data_path=../finished_files/chunked/train* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=noself_critic_lr=1 --batch_size=20 --use_temporal_attention=True --intradecoder=False --eta=1 --rl_training=True --lr=1 --sampling_probability=1  --fixed_eta=True --self_critic=False

@@ -1,0 +1,54 @@
+This is a RL method with policy gradient scripts.
+
+exp_name = policy_gradient
+
+lr = 0.15 (pre-train) and 0.001(RL training, but in paper, it is 0.0001)
+pointer_gen = True
+sampling_probability = 0            # Use only the ground truth data (no sampling)
+coverage = False
+rl_training = True
+eta = 1                             # Use only RL loss
+reward_function = rouge_l/f_score
+intradecoder = False                # Intradecoder seems not work on short summary
+use_temporal_attention = True       # I haven't tested whether this trick work on short summary
+
+
+=====================
+
+If pre-train for this model, at beginning running baseline model,
+After pre-train, set convert_to_reinforce_model=True, and then start RL training.
+
+Pre-train:
+--mode=train --data_path=../finished_files/chunked/train_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=policy_gradient --batch_size=32 --use_temporal_attention=True --intradecoder=False --eta=0 --rl_training=True --lr=0.15
+
+Convert to RL model:
+--mode=train --data_path=../finished_files/chunked/train_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=policy_gradient --batch_size=32 --use_temporal_attention=True --intradecoder=False --eta=1 --rl_training=True --lr=0.001 --convert_to_reinforce_model=True
+
+=====================
+
+Train mode:
+
+--mode=train --data_path=../finished_files/chunked/train_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=policy_gradient --batch_size=32 --use_temporal_attention=True --intradecoder=False --eta=1 --rl_training=True --lr=0.001 --sampling_probability=1
+
+=====================
+
+Eval mode:
+
+--mode=eval --data_path=../finished_files/chunked/test_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=policy_gradient --batch_size=32 --use_temporal_attention=True --intradecoder=False --eta=1 --rl_training=True --lr=0.001 --sampling_probability=1
+
+=====================
+
+Decode mode:
+
+--mode=decode --data_path=../finished_files/chunked/test_* --vocab_path=../finished_files/vocab --log_root=./log --exp_name=policy_gradient --batch_size=32 --use_temporal_attention=True --intradecoder=False --eta=1 --rl_training=True --lr=0.001 --single_pass=True
+
+=====================
+
+Convert old pointer model wrote by Abigail See to this pointer model:
+
+--mode=train --data_path=../finished_files/chunked/train_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=policy_gradient --batch_size=32 --use_temporal_attention=True  --convert_version_old_to_new=True
+
+
+To RL model:
+
+--mode=train --data_path=../finished_files/chunked/train_* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=policy_gradient --batch_size=32 --use_temporal_attention=True --intradecoder=False --eta=1 --rl_training=True --lr=0.001  --convert_version_old_to_new=True

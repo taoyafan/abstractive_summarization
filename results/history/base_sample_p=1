@@ -1,0 +1,20 @@
+
+rl_training=True
+exp_name=base_sample_p=1
+lr = 0.15
+sampling_probability = 1
+fixed_sampling_probability = True
+greedy_scheduled_sampling = True
+scheduled_sampling = True
+eta=0
+
+
+Train mode:
+
+--mode=train --data_path=../finished_files/chunked/train* --eval_data_path=../finished_files/chunked/test* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=base_sample_p=1 --batch_size=20 --use_temporal_attention=True --intradecoder=False --eta=0 --rl_training=True --lr=0.15 --sampling_probability=1 --fixed_eta=True --scheduled_sampling=True --fixed_sampling_probability=True --greedy_scheduled_sampling=True
+
+
+
+Eval mode:
+
+--mode=eval --data_path=../finished_files/chunked/test* --eval_data_path=../finished_files/chunked/test* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=base_sample_p=1 --batch_size=20 --use_temporal_attention=True --intradecoder=False --eta=0 --rl_training=True --lr=0.15 --sampling_probability=1 --fixed_eta=True --scheduled_sampling=True --fixed_sampling_probability=True --greedy_scheduled_sampling=True

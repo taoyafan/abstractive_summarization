@@ -1,0 +1,23 @@
+
+rl_training=True
+exp_name=base_dropout_0.9
+lr = 0.15
+fixed_sampling_probability = True
+greedy_scheduled_sampling = True
+scheduled_sampling = True
+eta=0
+use_temporal_attention=False
+
+Train mode:
+sampling_probability = 0
+dropout_keep_p = 0.9
+
+--mode=train --data_path=../finished_files/chunked/train* --eval_data_path=../finished_files/chunked/test* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=base_dropout_0.9 --batch_size=20 --use_temporal_attention=False --intradecoder=False --eta=0 --rl_training=True --lr=0.15 --sampling_probability=0 --fixed_eta=True --scheduled_sampling=True --fixed_sampling_probability=True --greedy_scheduled_sampling=True --dropout_keep_p=0.9
+
+
+
+Eval mode:
+sampling_probability=1
+dropout_keep_p = 1
+
+--mode=eval --data_path=../finished_files/chunked/test* --eval_data_path=../finished_files/chunked/test* --vocab_path=../finished_files/vocab --log_root=../log --exp_name=base_dropout_0.9 --batch_size=20 --use_temporal_attention=False --intradecoder=False --eta=0 --rl_training=True --lr=0.15 --sampling_probability=1 --fixed_eta=True --scheduled_sampling=True --fixed_sampling_probability=True --greedy_scheduled_sampling=True
