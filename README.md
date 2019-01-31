@@ -39,19 +39,18 @@ $$
 
 [src](https://github.com/taoyafan/abstractive_summarization/tree/master/src) 中为源代码，其中[run_summarization.py](https://github.com/taoyafan/abstractive_summarization/blob/master/src/run_summarization.py)为主程序。
 
-[results](https://github.com/taoyafan/abstractive_summarization/tree/master/results)中为不同模型的运行命令。
+[results](https://github.com/taoyafan/abstractive_summarization/tree/master/results)中为不同模型的运行命令（参数）。
 
-### 命令说明
+### 参数说明
 
 基本命令同[**RLSeq2Seq**](https://github.com/yaserkl/RLSeq2Seq)，增加参数如下：
 
-convert_version_old_to_new，为 True 时可加载 [**pointer-generator**](https://github.com/abisee/pointer-generator) 提供的预训练模型。
-
-eval_data_path，验证集路径。
-
-dropout_keep_p，在 encoder 和 decoder 的 LSTM 的 cell 中增加 drop out，对 input、output 和 state 使用相同的 keep_p，默认为1，即不使用 drop out
-
-rising_greedy_r，为 True 时 policy gradient 使用更改后的公式，即目标为提升 greedy 得到的 reward，为 False 时为原公式，但是占用显存增大一倍
+| 参数                       | 说明                                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| convert_version_old_to_new | 为 True 时可加载 [**pointer-generator**](https://github.com/abisee/pointer-generator) 提供的预训练模型 |
+| eval_data_path             | 验证集路径                                                   |
+| dropout_keep_p             | 在 encoder 和 decoder 的 LSTM 的 cell 中增加 drop out，对 input、output 和 state 使用相同的 keep_p，默认为1，即不使用 drop out |
+| rising_greedy_r            | 为 True 时 policy gradient 使用更改后的公式，即目标为提升 greedy 得到的 reward，为 False 时为原公式，但是占用显存增大一倍 |
 
 ### 运行说明
 
