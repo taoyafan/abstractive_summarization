@@ -1,5 +1,5 @@
 这个仓库是[字节跳动比赛 Byte Cup 2018，自动生成新闻标题](https://biendata.com/competition/bytecup2018/)，水滴队（最终成绩23名）的代码。
-
+有关比赛的总结，欢迎异步博客：https://blog.csdn.net/taoyafan/article/details/84879285
 ## Requirements
 
 python3.5 或以上
