@@ -33,7 +33,7 @@ $$
 
 参考程序[**RLSeq2Seq**](https://github.com/yaserkl/RLSeq2Seq) 和 [**pointer-generator**](https://github.com/abisee/pointer-generator)，他们介绍的很清楚，只是这里只用在比赛中，生成的标题较短，且数据集来自官方。
 
-数据的预处理参考[**cnn-dailymail**](https://github.com/taoyafan/cnn-dailymail)。
+数据的预处理参考 cnn-dailymail 中的 [**make_datafiles.ipynb**](https://github.com/taoyafan/cnn-dailymail/tree/master/bytecup)。
 
 ### 文件说明
 
